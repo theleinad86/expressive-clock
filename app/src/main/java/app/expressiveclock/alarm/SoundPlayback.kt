@@ -7,6 +7,8 @@ internal class SoundPlayback(private val backend: Backend) {
         fun start()
         fun pause()
         fun release()
+        /** Linear gain, 0..1. Optional so test doubles need not care. */
+        fun setVolume(volume: Float) {}
     }
     interface Backend {
         fun requestFocus(changed: (Boolean) -> Unit): Boolean
@@ -21,6 +23,13 @@ internal class SoundPlayback(private val backend: Backend) {
     private var ready = false
     private var focused = false
     private var active = false
+    private var volume = 1f
+
+    /** Applies to the current player and to every fallback created after it. */
+    fun setVolume(value: Float) {
+        volume = value.coerceIn(0f, 1f)
+        player?.setVolume(volume)
+    }
 
     fun play(sources: List<String>) {
         stop()
@@ -37,6 +46,7 @@ internal class SoundPlayback(private val backend: Backend) {
             try {
                 candidate = backend.create(sources[index])
                 player = candidate
+                candidate.setVolume(volume)
                 val current = candidate
                 current.prepare(ready = {
                     if (token == generation && player === current) {

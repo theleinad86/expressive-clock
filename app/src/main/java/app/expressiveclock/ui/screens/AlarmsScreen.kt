@@ -959,7 +959,7 @@ private fun AlarmTile(
             .clearAndSetSemantics {
                 contentDescription = buildString {
                     if (selected) append("Selected, ")
-                    append("%d:%02d %s".format(hour12, alarm.time.minute, meridiem))
+                    append(if (use24h) "%02d:%02d".format(hour12, alarm.time.minute) else "%d:%02d %s".format(hour12, alarm.time.minute, meridiem))
                     if (alarm.label.isNotBlank()) append(", ${alarm.label}")
                     append(", ${alarm.repeatLabel()}")
                     append(if (armed) ", on" else ", off")

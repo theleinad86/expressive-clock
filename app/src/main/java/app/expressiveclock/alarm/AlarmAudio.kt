@@ -69,19 +69,30 @@ internal class AlarmAudio(private val context: Context, private val looping: Boo
                 }
                 override fun start() { runCatching { media.start(); Log.i("AlarmAudio", "Playback started on alarm stream"); onStarted?.invoke(source) }.onFailure { onFallback?.invoke(); onFailure?.invoke() } }
                 override fun pause() { runCatching { media.pause() } }
+                override fun setVolume(volume: Float) { runCatching { media.setVolume(volume, volume) } }
                 override fun release() { timeout?.let(handler::removeCallbacks); scope.cancel(); media.release() }
             }
         }
         override fun exhausted() { Log.e("AlarmAudio", "No playable alarm source"); onFallback?.invoke() }
     })
+    /**
+     * `null` means "default alarm sound" (that is what the sound page stores for it). [SILENT][app.expressiveclock.data.SILENT]
+     * and anything blank mean no sound at all: no player is created, and the fallback chain below
+     * must never turn an explicit silence into the default ringtone.
+     */
     fun play(uri: String?) {
-        if (uri == app.expressiveclock.data.SILENT) { stop(); return }
+        if (isSilentSound(uri)) { stop(); return }
         playback.play(listOfNotNull(uri,
             runCatching { RingtoneManager.getActualDefaultRingtoneUri(context, RingtoneManager.TYPE_ALARM)?.toString() }.getOrNull(),
             RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)?.toString(),
             "android.resource://${context.packageName}/${R.raw.alarm_fallback}").distinct())
     }
+    fun setVolume(volume: Float): Unit { playback.setVolume(volume) }
     fun pause(): Unit { playback.pause() }
     fun resume(): Unit { playback.resume() }
     fun stop(): Unit { playback.stop() }
 }
+
+/** True for an explicit "Silent" choice or an empty/blank URI; such a source must never start a player. */
+internal fun isSilentSound(uri: String?): Boolean =
+    uri != null && (uri == app.expressiveclock.data.SILENT || uri.isBlank() || uri.equals("null", ignoreCase = true))

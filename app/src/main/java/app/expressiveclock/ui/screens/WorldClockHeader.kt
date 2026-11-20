@@ -167,7 +167,7 @@ internal fun AnalogueWorldClock(zone: ZoneId, now: Long, modifier: Modifier, act
     val measurer = rememberTextMeasurer()
     val numeralStyle = MaterialTheme.typography.titleMedium.copy(color = ink, fontWeight = FontWeight.Medium)
     val labels = remember(measurer, numeralStyle) { (1..12).map { measurer.measure(it.toString(), numeralStyle) } }
-    val semanticTime = Instant.ofEpochMilli(now).atZone(zone).format(DateTimeFormatter.ofPattern("h:mm:ss a"))
+    val semanticTime = Instant.ofEpochMilli(now).atZone(zone).format(DateTimeFormatter.ofPattern("HH:mm:ss"))
     Canvas(modifier.clockLighting(accent, dark).semantics { contentDescription = "Analogue clock, $semanticTime" }) {
         val r = size.minDimension / 2f - 4.dp.toPx()
         if (r <= 0f) return@Canvas

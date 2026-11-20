@@ -56,7 +56,7 @@ internal object UpcomingAlarm {
         val manager = context.getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(NotificationChannel(CHANNEL,"Upcoming alarms",NotificationManager.IMPORTANCE_LOW).apply { setSound(null,null) })
         if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return
-        val time = DateFormat.getTimeFormat(context).format(java.util.Date(at))
+        val time = java.time.format.DateTimeFormatter.ofPattern("HH:mm").format(Instant.ofEpochMilli(at).atZone(ZoneId.systemDefault()))
         val n = NotificationCompat.Builder(context,CHANNEL).setSmallIcon(R.drawable.ic_stat_alarm)
             .setContentTitle("Upcoming alarm · $time").setContentText(alarm.label.ifBlank { "Alarm" })
             .setContentIntent(Notifications.openApp(context, Notifications.TAB_ALARMS))

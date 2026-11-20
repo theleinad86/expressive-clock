@@ -535,11 +535,8 @@ private fun CityGridCard(
 ) {
     val locale = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]
     val local = city.timeAt(nowUtcMillis)
-    val use24h = when (LocalWorldHourFormat.current) {
-        app.expressiveclock.data.HourFormat.SYSTEM -> app.expressiveclock.ui.rememberSystem24HourFormat()
-        app.expressiveclock.data.HourFormat.H24 -> true
-        app.expressiveclock.data.HourFormat.H12 -> false
-    }
+    // The app always shows 24-hour time.
+    val use24h = true
     val time = local.format(DateTimeFormatter.ofPattern(if (use24h) "HH:mm" else "h:mm", locale))
     val date = local.format(DateTimeFormatter.ofPattern("EEE, d MMM", locale))
     val scheme = MaterialTheme.colorScheme

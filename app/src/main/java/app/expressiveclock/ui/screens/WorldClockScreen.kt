@@ -88,11 +88,8 @@ fun WorldClockScreen(
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
 ) {
-    val use24h = when (settings.hourFormat) {
-        HourFormat.SYSTEM -> app.expressiveclock.ui.rememberSystem24HourFormat()
-        HourFormat.H12 -> false
-        HourFormat.H24 -> true
-    }
+    // The app always shows 24-hour time.
+    val use24h = true
     val measurer = rememberTextMeasurer()
     LazyColumn(
         modifier = modifier.fillMaxSize(),

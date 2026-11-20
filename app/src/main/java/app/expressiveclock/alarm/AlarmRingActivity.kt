@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
-import android.text.format.DateFormat
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
@@ -27,9 +26,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.map
 import app.expressiveclock.data.ClockSettings
 import app.expressiveclock.data.ClockStore
+import app.expressiveclock.data.ShakeAction
 import app.expressiveclock.ui.rememberWallTicker
 import app.expressiveclock.ui.screens.WidePill
 import app.expressiveclock.ui.theme.ClockFace
@@ -77,6 +81,17 @@ class AlarmRingActivity : ComponentActivity() {
             override fun handleOnBackPressed() = Unit
         })
 
+        // A shake, the silence timeout or the shade can end the alarm without this screen; once the
+        // ringer has been seen and is gone, there is nothing left to dismiss.
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                var seenRinging = false
+                AlarmService.ringing.collect { ringing ->
+                    if (ringing) seenRinging = true else if (seenRinging) finish()
+                }
+            }
+        }
+
         setContent {
             val settingsFlow = androidx.compose.runtime.remember(store) { store.settings.map { it as ClockSettings? } }
             val loadedSettings by settingsFlow.collectAsStateWithLifecycle(initialValue = null)
@@ -86,6 +101,10 @@ class AlarmRingActivity : ComponentActivity() {
                     Ringing(
                         label = label,
                         snoozeMinutes = settings.alarms.snoozeMinutes,
+                        shakeHint = if (!settings.alarms.shakeEnabled) null else when (settings.alarms.shakeAction) {
+                            ShakeAction.DISMISS -> "Shake to dismiss"
+                            ShakeAction.SNOOZE -> "Shake to snooze"
+                        },
                         onSnooze = {
                             sendBroadcast(action(ClockActionReceiver.ACTION_SNOOZE, id))
                             finish()
@@ -126,19 +145,14 @@ class AlarmRingActivity : ComponentActivity() {
 private fun Ringing(
     label: String,
     snoozeMinutes: Int,
+    shakeHint: String?,
     onSnooze: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val now by rememberWallTicker()
     val time = LocalTime.now()
-    val context = LocalContext.current
-    val is24Hour = app.expressiveclock.ui.rememberSystem24HourFormat()
-
-    val formattedTime = if (is24Hour) {
-        "%02d:%02d".format(time.hour, time.minute)
-    } else {
-        "%02d:%02d".format((time.hour % 12).takeIf { it != 0 } ?: 12, time.minute)
-    }
+    // Always 24-hour: HH:mm.
+    val formattedTime = "%02d:%02d".format(time.hour, time.minute)
 
     Column(
         modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 40.dp),
@@ -178,5 +192,13 @@ private fun Ringing(
             height = 72.dp,
             modifier = Modifier.fillMaxWidth(),
         )
+        if (shakeHint != null) {
+            Spacer(Modifier.height(20.dp))
+            Text(
+                shakeHint,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }

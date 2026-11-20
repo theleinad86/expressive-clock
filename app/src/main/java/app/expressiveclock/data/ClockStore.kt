@@ -213,6 +213,17 @@ internal fun Preferences.toSettings() = ClockSettings(
         snoozeMinutes = this[intPreferencesKey("snooze")] ?: 10,
         cards24Hour = this[booleanPreferencesKey("alarmCards24Hour")] ?: false,
         weekStart = enumOr(this[stringPreferencesKey("weekStart")], WeekStart.SYSTEM),
+        shakeEnabled = this[booleanPreferencesKey("shake_enabled")] ?: false,
+        shakeAction = enumOr(this[stringPreferencesKey("shake_action")], ShakeAction.DISMISS),
+        shakeSensitivity = enumOr(this[stringPreferencesKey("shake_sensitivity")], ShakeSensitivity.MEDIUM),
+        shakeCount = (this[intPreferencesKey("shake_count")] ?: 8)
+            .coerceIn(SHAKE_COUNT_RANGE.first, SHAKE_COUNT_RANGE.last),
+        shakeCustomG = this[floatPreferencesKey("shake_custom_g")] ?: SHAKE_NOT_CALIBRATED,
+        fadeIn = this[booleanPreferencesKey("alarm_fade_in")] ?: false,
+        fadeInDurationSeconds = (this[intPreferencesKey("alarm_fade_in_duration")] ?: 20)
+            .coerceIn(FADE_IN_DURATION_RANGE.first, FADE_IN_DURATION_RANGE.last),
+        startVolumePercent = (this[intPreferencesKey("alarm_start_volume")] ?: 0)
+            .coerceIn(START_VOLUME_RANGE.first, START_VOLUME_RANGE.last),
     ),
     world = WorldClockSettings(
         deleteTutorialShown = this[booleanPreferencesKey("worldDeleteTutorialShown")] ?: false,
@@ -260,6 +271,14 @@ internal fun androidx.datastore.preferences.core.MutablePreferences.writeSetting
     this[intPreferencesKey("silenceAfter")] = s.alarms.silenceAfterMinutes
     this[intPreferencesKey("snooze")] = s.alarms.snoozeMinutes
     this[stringPreferencesKey("weekStart")] = s.alarms.weekStart.name
+    this[booleanPreferencesKey("shake_enabled")] = s.alarms.shakeEnabled
+    this[stringPreferencesKey("shake_action")] = s.alarms.shakeAction.name
+    this[stringPreferencesKey("shake_sensitivity")] = s.alarms.shakeSensitivity.name
+    this[intPreferencesKey("shake_count")] = s.alarms.shakeCount
+    this[floatPreferencesKey("shake_custom_g")] = s.alarms.shakeCustomG
+    this[booleanPreferencesKey("alarm_fade_in")] = s.alarms.fadeIn
+    this[intPreferencesKey("alarm_fade_in_duration")] = s.alarms.fadeInDurationSeconds
+    this[intPreferencesKey("alarm_start_volume")] = s.alarms.startVolumePercent
     this[booleanPreferencesKey("showSeconds")] = s.world.showSeconds
     this[booleanPreferencesKey("worldDeleteTutorialShown")] = s.world.deleteTutorialShown
     this[stringPreferencesKey("hourFormat")] = s.world.hourFormat.name

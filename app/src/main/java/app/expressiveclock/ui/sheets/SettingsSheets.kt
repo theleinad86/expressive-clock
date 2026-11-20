@@ -568,13 +568,6 @@ fun WorldSettingsSheet(
                 checked = settings.world.showSeconds,
                 onChange = { v -> onChange { it.copy(world = it.world.copy(showSeconds = v)) } },
             )
-            ChoiceRow(
-                title = "Time format",
-                value = settings.world.hourFormat,
-                options = HourFormat.entries,
-                label = { it.label },
-                onSelect = { v -> onChange { it.copy(world = it.world.copy(hourFormat = v)) } },
-            )
         }
     }
 }

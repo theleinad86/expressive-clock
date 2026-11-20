@@ -26,7 +26,35 @@ data class AlarmSettings(
     val snoozeMinutes: Int = 10,
     val cards24Hour: Boolean = false,
     val weekStart: WeekStart = WeekStart.SYSTEM,
-)
+    val shakeEnabled: Boolean = false,
+    val shakeAction: ShakeAction = ShakeAction.DISMISS,
+    val shakeSensitivity: ShakeSensitivity = ShakeSensitivity.MEDIUM,
+    /** Shakes required inside the detection window, [SHAKE_COUNT_RANGE]. */
+    val shakeCount: Int = 8,
+    /** Calibrated threshold in g; [SHAKE_NOT_CALIBRATED] means the preset applies. */
+    val shakeCustomG: Float = SHAKE_NOT_CALIBRATED,
+    val fadeIn: Boolean = false,
+    /** Seconds, [FADE_IN_DURATION_RANGE] in steps of 5. */
+    val fadeInDurationSeconds: Int = 20,
+    /** Percent, [START_VOLUME_RANGE]. */
+    val startVolumePercent: Int = 0,
+) {
+    /** The calibrated value wins only when it is strong enough to tell a shake from a walk. */
+    val shakeCalibrated: Boolean get() = shakeCustomG > MIN_CALIBRATED_G
+    val shakeThresholdG: Float get() = if (shakeCalibrated) shakeCustomG else shakeSensitivity.g
+}
+
+enum class ShakeAction(val label: String) { DISMISS("Dismiss"), SNOOZE("Snooze") }
+
+enum class ShakeSensitivity(val label: String, val g: Float) {
+    LOW("Light", 1.5f), MEDIUM("Medium", 2.7f), HIGH("Strong", 4.0f)
+}
+
+const val SHAKE_NOT_CALIBRATED = -1f
+const val MIN_CALIBRATED_G = 1.3f
+val SHAKE_COUNT_RANGE = 3..15
+val FADE_IN_DURATION_RANGE = 5..60
+val START_VOLUME_RANGE = 0..50
 
 data class WorldClockSettings(
     val deleteTutorialShown: Boolean = false,

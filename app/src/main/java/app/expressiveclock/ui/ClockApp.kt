@@ -375,7 +375,7 @@ fun ClockApp(startTab: String? = null, startRequestId: Long = 0L, vm: ClockViewM
                     Tab.ALARMS -> {
                         val alarms by vm.alarms.collectAsStateWithLifecycle()
                         val alarmCards: @Composable (Modifier, Boolean, PaddingValues) -> Unit = { layout, single, insets ->
-                            CompositionLocalProvider(LocalAlarmCards24Hour provides settings.alarms.cards24Hour) {
+                            CompositionLocalProvider(LocalAlarmCards24Hour provides true) {
                                 AlarmsScreen(alarms = alarms, weekStart = settings.alarms.weekStart,
                                     staggerEntranceToken = isPostOnboardingStaggerToken,
                                     onStaggerConsumed = { isPostOnboardingStaggerToken = 0 },

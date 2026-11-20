@@ -97,6 +97,9 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material.icons.outlined.Vibration
+import androidx.compose.material.icons.automirrored.outlined.VolumeUp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.CalendarMonth
@@ -350,13 +353,7 @@ fun SettingsScreen(
             }
 
             if (category == null || category == SettingsCategory.ALARMS) SettingsCard(title = "Alarms") {
-                SettingsNavigateRow(
-                    icon = Icons.Outlined.Schedule,
-                    title = "Alarm card time format",
-                    subtitle = if (settings.alarms.cards24Hour) "24-hour" else "12-hour",
-                    onClick = { picker = SettingsPicker.ALARM_CARD_FORMAT },
-                )
-                SettingsDivider()
+                // Alarm times are always 24-hour, so there is no time format choice here.
                 SettingsNavigateRow(
                     icon = Icons.Outlined.NotificationsNone,
                     title = "Silence after",
@@ -379,6 +376,14 @@ fun SettingsScreen(
                 )
 
 
+            }
+
+            if (category == null || category == SettingsCategory.ALARMS) SettingsCard(title = "Shake to dismiss") {
+                ShakeSettingsRows(settings.alarms) { update -> onChange { it.copy(alarms = update(it.alarms)) } }
+            }
+
+            if (category == null || category == SettingsCategory.ALARMS) SettingsCard(title = "Volume") {
+                VolumeSettingsRows(settings.alarms) { update -> onChange { it.copy(alarms = update(it.alarms)) } }
             }
 
             if (category == null || category == SettingsCategory.TIMERS) SettingsCard(title = "Timers") {
@@ -2001,3 +2006,235 @@ private fun setPaintBlurEffect(paint: Paint, radius: Float, tileMode: Shader.Til
 @Composable
 private fun compactSettingsDialog(): Boolean =
     androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 360 || LocalDensity.current.fontScale > 1.1f
+
+/* ── Shake to dismiss & volume fade-in ─────────────────────────────────────────────────────── */
+
+@Composable
+private fun ShakeSettingsRows(
+    alarms: app.expressiveclock.data.AlarmSettings,
+    update: ((app.expressiveclock.data.AlarmSettings) -> app.expressiveclock.data.AlarmSettings) -> Unit,
+) {
+    var dialog by remember { mutableStateOf<String?>(null) }
+    SettingsSwitchRow(
+        icon = Icons.Outlined.Vibration,
+        title = "Shake to dismiss",
+        subtitle = if (alarms.shakeEnabled) "Shake your phone while an alarm rings" else "Off",
+        checked = alarms.shakeEnabled,
+        onCheckedChange = { v -> update { it.copy(shakeEnabled = v) } },
+    )
+    AnimatedVisibility(visible = alarms.shakeEnabled, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
+        Column {
+            SettingsDivider()
+            SettingsNavigateRow(
+                icon = Icons.Outlined.Snooze,
+                title = "Action",
+                subtitle = alarms.shakeAction.label,
+                onClick = { dialog = "action" },
+            )
+            SettingsDivider()
+            if (alarms.shakeCalibrated) {
+                SettingsNavigateRow(
+                    icon = Icons.Outlined.Tune,
+                    title = "Sensitivity",
+                    subtitle = "Custom (%.1f g)".format(java.util.Locale.US, alarms.shakeCustomG),
+                    trailing = "Reset to preset",
+                    onClick = { update { it.copy(shakeCustomG = app.expressiveclock.data.SHAKE_NOT_CALIBRATED) } },
+                )
+            } else {
+                SettingsNavigateRow(
+                    icon = Icons.Outlined.Tune,
+                    title = "Sensitivity",
+                    subtitle = sensitivityLabel(alarms.shakeSensitivity),
+                    onClick = { dialog = "sensitivity" },
+                )
+            }
+            SettingsDivider()
+            SettingsNavigateRow(
+                icon = Icons.Outlined.Vibration,
+                title = "Calibrate by shaking",
+                subtitle = "Measure how hard you shake",
+                onClick = { dialog = "calibrate" },
+            )
+            SettingsDivider()
+            SettingsSliderRow(
+                title = "Shakes required",
+                valueLabel = "${alarms.shakeCount}× within 3 s",
+                value = alarms.shakeCount,
+                range = app.expressiveclock.data.SHAKE_COUNT_RANGE,
+                step = 1,
+                onValueChange = { v -> update { it.copy(shakeCount = v) } },
+            )
+        }
+    }
+    when (dialog) {
+        "action" -> ChoicePickerDialog(
+            title = "Action",
+            value = alarms.shakeAction,
+            options = app.expressiveclock.data.ShakeAction.entries,
+            label = { it.label },
+            onDismiss = { dialog = null },
+            onSelect = { v -> update { it.copy(shakeAction = v) }; dialog = null },
+        )
+        "sensitivity" -> ChoicePickerDialog(
+            title = "Sensitivity",
+            value = alarms.shakeSensitivity,
+            options = app.expressiveclock.data.ShakeSensitivity.entries,
+            label = ::sensitivityLabel,
+            onDismiss = { dialog = null },
+            onSelect = { v -> update { it.copy(shakeSensitivity = v) }; dialog = null },
+        )
+        "calibrate" -> ShakeCalibrationDialog(
+            onDismiss = { dialog = null },
+            onSave = { g -> update { it.copy(shakeCustomG = g) }; dialog = null },
+        )
+    }
+}
+
+private fun sensitivityLabel(s: app.expressiveclock.data.ShakeSensitivity) =
+    "${s.label} (%.1fg)".format(java.util.Locale.US, s.g)
+
+@Composable
+private fun VolumeSettingsRows(
+    alarms: app.expressiveclock.data.AlarmSettings,
+    update: ((app.expressiveclock.data.AlarmSettings) -> app.expressiveclock.data.AlarmSettings) -> Unit,
+) {
+    SettingsSwitchRow(
+        icon = Icons.AutoMirrored.Outlined.VolumeUp,
+        title = "Fade in volume",
+        subtitle = if (alarms.fadeIn) "Alarms start quietly and get louder" else "Off",
+        checked = alarms.fadeIn,
+        onCheckedChange = { v -> update { it.copy(fadeIn = v) } },
+    )
+    AnimatedVisibility(visible = alarms.fadeIn, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
+        Column {
+            SettingsDivider()
+            SettingsSliderRow(
+                title = "Fade-in duration",
+                valueLabel = "${alarms.fadeInDurationSeconds} s",
+                value = alarms.fadeInDurationSeconds,
+                range = app.expressiveclock.data.FADE_IN_DURATION_RANGE,
+                step = 5,
+                onValueChange = { v -> update { it.copy(fadeInDurationSeconds = v) } },
+            )
+            SettingsDivider()
+            SettingsSliderRow(
+                title = "Start volume",
+                valueLabel = "${alarms.startVolumePercent} %",
+                value = alarms.startVolumePercent,
+                range = app.expressiveclock.data.START_VOLUME_RANGE,
+                step = 5,
+                onValueChange = { v -> update { it.copy(startVolumePercent = v) } },
+            )
+        }
+    }
+}
+
+/** An integer slider that snaps to [step]; writes on release so DataStore is not hammered. */
+@Composable
+private fun SettingsSliderRow(
+    title: String,
+    valueLabel: String,
+    value: Int,
+    range: IntRange,
+    step: Int,
+    onValueChange: (Int) -> Unit,
+) {
+    var dragging by remember { mutableStateOf<Float?>(null) }
+    val shown = dragging?.let { snapTo(it, range, step) } ?: value
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .expandedSettingsTile()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f))
+            Text(if (dragging == null) valueLabel else valueLabel.replaceFirst(value.toString(), shown.toString()),
+                style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+        }
+        Slider(
+            value = (dragging ?: value.toFloat()),
+            onValueChange = { dragging = it },
+            onValueChangeFinished = {
+                dragging?.let { onValueChange(snapTo(it, range, step)) }
+                dragging = null
+            },
+            valueRange = range.first.toFloat()..range.last.toFloat(),
+            steps = ((range.last - range.first) / step - 1).coerceAtLeast(0),
+        )
+    }
+}
+
+private fun snapTo(raw: Float, range: IntRange, step: Int): Int =
+    (range.first + Math.round((raw - range.first) / step) * step).coerceIn(range.first, range.last)
+
+/**
+ * Three seconds of "shake now", recording the strongest acceleration seen. Anything at or below
+ * [app.expressiveclock.data.MIN_CALIBRATED_G] is indistinguishable from carrying the phone, so it
+ * is rejected rather than saved.
+ */
+@Composable
+private fun ShakeCalibrationDialog(onDismiss: () -> Unit, onSave: (Float) -> Unit) {
+    val context = LocalContext.current
+    var attempt by remember { mutableStateOf(0) }
+    var secondsLeft by remember { mutableStateOf(3) }
+    var peak by remember { mutableFloatStateOf(0f) }
+    var result by remember { mutableStateOf<Float?>(null) }
+    val sensorManager = remember(context) { context.getSystemService(android.hardware.SensorManager::class.java) }
+    val sensor = remember(sensorManager) { sensorManager?.getDefaultSensor(android.hardware.Sensor.TYPE_ACCELEROMETER) }
+    val measuring = result == null && sensor != null
+
+    DisposableEffect(attempt, measuring) {
+        if (!measuring) return@DisposableEffect onDispose { }
+        val listener = object : android.hardware.SensorEventListener {
+            override fun onSensorChanged(event: android.hardware.SensorEvent) {
+                val (x, y, z) = Triple(event.values[0], event.values[1], event.values[2])
+                val g = kotlin.math.sqrt(x * x + y * y + z * z) / android.hardware.SensorManager.GRAVITY_EARTH
+                if (g > peak) peak = g
+            }
+            override fun onAccuracyChanged(sensor: android.hardware.Sensor?, accuracy: Int) = Unit
+        }
+        sensorManager?.registerListener(listener, sensor, android.hardware.SensorManager.SENSOR_DELAY_GAME)
+        onDispose { sensorManager?.unregisterListener(listener) }
+    }
+    LaunchedEffect(attempt) {
+        if (sensor == null) return@LaunchedEffect
+        peak = 0f
+        result = null
+        for (s in 3 downTo 1) {
+            secondsLeft = s
+            kotlinx.coroutines.delay(1_000)
+        }
+        secondsLeft = 0
+        result = peak
+    }
+
+    val tooWeak = result != null && result!! <= app.expressiveclock.data.MIN_CALIBRATED_G
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Calibrate by shaking") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                when {
+                    sensor == null -> Text("This device has no accelerometer.")
+                    result == null -> {
+                        Text("Shake your phone now…", style = MaterialTheme.typography.bodyLarge)
+                        Text("$secondsLeft", style = MaterialTheme.typography.displayMedium,
+                            color = MaterialTheme.colorScheme.primary)
+                    }
+                    tooWeak -> Text("Too weak – try again")
+                    else -> Text("Measured %.1f g".format(java.util.Locale.US, result))
+                }
+            }
+        },
+        confirmButton = {
+            when {
+                sensor == null || result == null -> Unit
+                tooWeak -> TextButton(onClick = { attempt++ }) { Text("Try again") }
+                else -> TextButton(onClick = { onSave(result!!) }) { Text("Save") }
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}

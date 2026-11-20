@@ -15,13 +15,17 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.getSystemService
 import app.expressiveclock.R
 import app.expressiveclock.data.ClockStore
-import app.expressiveclock.data.SILENT
+import app.expressiveclock.data.AlarmSettings
+import app.expressiveclock.data.ShakeAction
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -59,6 +63,8 @@ class AlarmService : Service() {
     private val starts = Mutex()
     private var active = false
     private var silenceJob: Job? = null
+    private var fadeJob: Job? = null
+    private var shakeDetector: ShakeDetector? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -86,7 +92,9 @@ class AlarmService : Service() {
                 }
                 val settings = store.settingsNow()
                 ring(ringingNotification(this@AlarmService, id, alarm.label.ifBlank { "Alarm" }),
-                    alarm.soundUri, alarm.vibrate, ALARM_PATTERN, settings.alarms.silenceAfterMinutes)
+                    alarm.soundUri, alarm.vibrate, ALARM_PATTERN, settings.alarms.silenceAfterMinutes,
+                    fade = settings.alarms)
+                startShakeDetection(id, settings.alarms)
             }
         }
     }
@@ -107,13 +115,21 @@ class AlarmService : Service() {
     }
 
     private fun ring(notification: android.app.Notification, uri: String?, shouldVibrate: Boolean,
-                     pattern: LongArray, silenceMinutes: Int) {
+                     pattern: LongArray, silenceMinutes: Int, fade: AlarmSettings? = null) {
         silenceJob?.cancel()
+        stopFade()
+        stopShakeDetection()
         sound.stop()
         vibrator?.cancel()
         foreground(notification)
         active = true
-        if (uri != SILENT) sound.play(uri)
+        _ringing.value = true
+        // Explicit silence: no MediaPlayer is created at all, so nothing can fall back to a default.
+        if (!isSilentSound(uri)) {
+            if (fade?.fadeIn == true) startFade(fade.startVolumePercent, fade.fadeInDurationSeconds)
+            else sound.setVolume(1f)
+            sound.play(uri)
+        }
         if (shouldVibrate) vibrate(pattern)
         // This timeout belongs to the active ringer, not a pending replacement's load job.
         silenceJob = scope.launch {
@@ -121,6 +137,48 @@ class AlarmService : Service() {
             delay(silenceMinutes * 60_000L)
             stopSelf()
         }
+    }
+
+    /**
+     * Starts at the configured share of the alarm stream and raises the player gain once a second
+     * until it reaches full volume. The system alarm volume itself is never touched.
+     */
+    private fun startFade(startPercent: Int, durationSeconds: Int) {
+        val start = (startPercent / 100f).coerceIn(0f, 1f)
+        val steps = durationSeconds.coerceAtLeast(1)
+        sound.setVolume(start)
+        fadeJob = scope.launch {
+            for (step in 1..steps) {
+                delay(1_000)
+                sound.setVolume(start + (1f - start) * step / steps)
+            }
+        }
+    }
+
+    private fun stopFade() {
+        fadeJob?.cancel()
+        fadeJob = null
+    }
+
+    private fun startShakeDetection(id: Long, settings: AlarmSettings) {
+        if (!settings.shakeEnabled) return
+        val action = when (settings.shakeAction) {
+            ShakeAction.DISMISS -> ClockActionReceiver.ACTION_DISMISS
+            ShakeAction.SNOOZE -> ClockActionReceiver.ACTION_SNOOZE
+        }
+        shakeDetector = ShakeDetector(this, settings.shakeThresholdG, settings.shakeCount) {
+            // Fire once; the receiver stops this service, whose onDestroy finishes the cleanup.
+            stopShakeDetection()
+            sendBroadcast(Intent(this, ClockActionReceiver::class.java)
+                .setPackage(packageName)
+                .setAction(action)
+                .putExtra(AlarmReceiver.EXTRA_ID, id))
+        }.also { it.start() }
+    }
+
+    private fun stopShakeDetection() {
+        shakeDetector?.stop()
+        shakeDetector = null
     }
 
     private fun foreground(n: android.app.Notification) {
@@ -148,7 +206,10 @@ class AlarmService : Service() {
 
     override fun onDestroy() {
         active = false
+        _ringing.value = false
         silenceJob?.cancel()
+        stopFade()
+        stopShakeDetection()
         sound.stop()
         vibrator?.cancel()
         scope.cancel()
@@ -163,6 +224,10 @@ class AlarmService : Service() {
         /** Half a second on, half off: insistent without being a klaxon. */
         private val ALARM_PATTERN = longArrayOf(0, 500, 500)
         private val TIMER_PATTERN = longArrayOf(0, 300, 200, 300, 900)
+
+        private val _ringing = MutableStateFlow(false)
+        /** Lets the ring screen close itself when the alarm ends without it (shake, timeout, shade). */
+        val ringing: StateFlow<Boolean> = _ringing.asStateFlow()
 
         fun stop(context: Context) {
             context.stopService(Intent(context, AlarmService::class.java))
